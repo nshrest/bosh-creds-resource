@@ -11,7 +11,7 @@ resource_types:
 - name: bosh-creds
   type: docker-image
   source:
-    repository: mkuratczyk/bosh-creds-resource
+    repository: tmobilecf/bosh-creds-resource
     tag: latest
 
 # ...
@@ -22,6 +22,8 @@ resources:
   source:
     pcf_opsman_admin_username: {{pcf_opsman_admin_username}}
     pcf_opsman_admin_password: {{pcf_opsman_admin_password}}
+    pcf_opsman_admin_client_id: {{pcf_opsman_admin_client_id}}
+    pcf_opsman_admin_client_secret: {{pcf_opsman_admin_client_secret}}
     opsman_url: {{opsman_url}}
 ```
 
@@ -70,7 +72,7 @@ In your resource configuration:
     pcf_opsman_admin_password: ((pcf_opsman_admin_password))
     opsman_url: ((opsman_url))
     external_bosh_address: ((external_bosh_address))
-    external_bosh\_client: ((external_bosh_client))
+    external_bosh_client: ((external_bosh_client))
     external_bosh_client_secret: ((external_bosh_client_secret))
     external_bosh_ca_cert: ((external_bosh_ca_cert))
 ```
