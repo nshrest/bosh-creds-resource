@@ -21,9 +21,25 @@ cat > "$payload" <&0
 
 pcf_opsman_admin_username=$(jq -r '.source.pcf_opsman_admin_username // ""' < $payload)
 pcf_opsman_admin_password=$(jq -r '.source.pcf_opsman_admin_password // ""' < $payload)
-pcf_opsman_admin_client_id=$(jq -r '.source.pcf_opsman_admin_client_id // ""' < $payload)
-pcf_opsman_admin_client_secret=$(jq -r '.source.pcf_opsman_admin_client_secret // ""' < $payload)
 opsman_url=$(jq -r '.source.opsman_url // ""' < $payload)
+
+mfa_enabled=false
+mfa_enabled=$(jq -r '.source.mfa_enabled // ""' < $payload)
+
+if [[ ${mfa_enabled} == "true" ]]; then
+  pcf_opsman_admin_client_id=$(jq -r '.source.pcf_opsman_admin_client_id // ""' < $payload)
+  pcf_opsman_admin_client_secret=$(jq -r '.source.pcf_opsman_admin_client_secret // ""' < $payload)
+
+  CURL="om --target https://${opsman_url} -k \
+    --client-id $pcf_opsman_admin_client_id \
+    --client-secret $pcf_opsman_admin_client_secret \
+    curl"
+else
+  CURL="om --target https://${opsman_url} -k \
+    --username $pcf_opsman_admin_username \
+    --password $pcf_opsman_admin_password \
+    curl"
+fi
 
 jumpbox_url=$(jq -r '.source.jumpbox_url // ""' < $payload)
 jumpbox_port=$(jq -r '.source.jumpbox_port // 22' < $payload)
@@ -31,12 +47,11 @@ jumpbox_ssh_key=$(jq -r '.source.jumpbox_ssh_key // ""' < $payload)
 jumpbox_ssh_key_escaped=$(jq '.source.jumpbox_ssh_key // ""' < $payload)
 jumpbox_username=$(jq -r '.source.jumpbox_username // ""' < $payload)
 
-CURL="om --target https://${opsman_url} -k \
-  --username $pcf_opsman_admin_username \
-  --password $pcf_opsman_admin_password \
-  --client-id $pcf_opsman_admin_client_id \
-  --client-secret $pcf_opsman_admin_client_secret \
-  curl"
+# Delete session if MFA enabled
+if [[ ${mfa_enabled} == "true" ]]; then
+  echo "MFA enabled. Logging out other user...."
+  $CURL -x DELETE --path=/api/v0/sessions
+fi
 
 # Get user, pass and CA cert
 CA_CERT=$($CURL --path=/api/v0/security/root_ca_certificate | jq -r .root_ca_certificate_pem)
@@ -57,7 +72,15 @@ $CURL --path="/api/v0/deployed/products/$director_id/static_ips" | jq -r .[0].ip
 
 # In PCF 1.12 there is a new endpoint with credentials to use with BOSH CLIv2
 set +e
-$CURL --path=/api/v0/deployed/director/credentials/bosh2_commandline_credentials > "$destination/bosh2_commandline_credentials.tmp"
+
+$CURL --path=/api/v0/deployed/director/credentials/bosh2_commandline_credentials > /dev/null
+if [ $? -eq 0 ]; then
+  $CURL --path=/api/v0/deployed/director/credentials/bosh2_commandline_credentials > "$destination/bosh2_commandline_credentials.tmp"
+else
+  $CURL --path=/api/v0/deployed/director/credentials/bosh_commandline_credentials > "$destination/bosh2_commandline_credentials.tmp"
+fi
+
+set -e
 # shellcheck disable=SC2181
 if [[ "$?" = "0" ]]; then
   jq -r .credential < "$destination/bosh2_commandline_credentials.tmp" | awk '{printf "export %s\nexport %s\nexport %s\n", $1, $2, $4}' > "$destination/bosh2_commandline_credentials"
@@ -110,4 +133,4 @@ sed 's/^/  /g' < "$destination/bosh-ca.pem" >> "$destination/pcf_bosh_director.y
 
 rm -f "$destination/bosh2_commandline_credentials.tmp"
 
-echo '{"version": {"ref": "123"}}' >&3
+echo '{"version": {"ref": "124"}}' >&3
